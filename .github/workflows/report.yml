@@ -12,10 +12,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
@@ -23,14 +23,21 @@ jobs:
         run: |
           pip install requests
           python .github/scripts/fetch_lyrics.py "${{ github.event.issue.title }}"
-        env:
-          ISSUE_NUMBER: ${{ github.event.issue.number }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Commit and Push
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Lyrics Bot"
+          
+          # If the file didn't change, exit gracefully
+          if git diff --quiet lyrics_db.json; then
+            echo "No new lyrics found. Exiting."
+            exit 0
+          fi
+          
           git add lyrics_db.json
-          git commit -m "Added lyrics for issue #${{ github.event.issue.number }}" || echo "No changes to commit"
+          git commit -m "Added lyrics for issue #${{ github.event.issue.number }}"
+          
+          # Pull before pushing to avoid conflicts
+          git pull --rebase origin main
           git push

@@ -1,7 +1,6 @@
 import sys
 import json
 import requests
-import os
 
 def fetch_lyrica(title, artist):
     try:
@@ -9,38 +8,48 @@ def fetch_lyrica(title, artist):
             "artist": artist,
             "song": title,
             "timestamps": "true"
-        }, timeout=10)
+        }, timeout=15)
+        
+        print(f"[Debug] API Status: {resp.status_code}")
+        
         if resp.status_code == 200:
             data = resp.json()
+            print(f"[Debug] API Response: {data}")
+            
             if data.get("status") == "success":
-                return data["data"]["lyrics"]
-    except:
-        pass
+                lyrics = data.get("data", {}).get("lyrics", "")
+                if lyrics:
+                    return lyrics
+    except Exception as e:
+        print(f"[Error] Exception occurred: {e}")
     return None
 
 if __name__ == "__main__":
     title_artist = sys.argv[1]
     try:
+        # The issue title is "Song Title - Artist Name"
         title, artist = title_artist.split(" - ", 1)
     except:
-        print("Invalid title format")
+        print("Invalid title format. Expected 'Title - Artist'")
         sys.exit(0)
 
-    print(f"Searching for: {title} by {artist}")
+    print(f"Searching for: '{title}' by '{artist}'")
     lyrics = fetch_lyrica(title, artist)
 
     if lyrics:
-        with open("lyrics_db.json", "r") as f:
-            db = json.load(f)
+        try:
+            with open("lyrics_db.json", "r") as f:
+                db = json.load(f)
+        except:
+            db = {}
         
-        # Use a unique key
+        # Use the exact same key format as the Rust app
         key = f"{title.lower().strip()}|{artist.lower().strip()}"
         db[key] = lyrics
         
         with open("lyrics_db.json", "w") as f:
             json.dump(db, f, indent=2)
         
-        print(f"Success! Lyrics added to DB.")
+        print(f"Success! Lyrics added to DB under key: {key}")
     else:
-        print("Could not fetch lyrics automatically.")
-        # Optionally leave the issue open for manual review
+        print("Could not fetch lyrics automatically. The database was not updated.")

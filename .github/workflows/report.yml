@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   fetch-lyrics:
@@ -20,16 +21,22 @@ jobs:
           python-version: '3.10'
 
       - name: Run Lyrics Fetcher
+        id: fetcher
         run: |
           pip install requests
-          python .github/scripts/fetch_lyrics.py "${{ github.event.issue.title }}"
+          # Capture output to check for ALREADY_EXISTS
+          python .github/scripts/fetch_lyrics.py "${{ github.event.issue.title }}" > output.txt
+          cat output.txt
+          if grep -q "ALREADY_EXISTS" output.txt; then
+            echo "already_exists=true" >> $GITHUB_OUTPUT
+          fi
 
       - name: Commit and Push
+        if: steps.fetcher.outputs.already_exists != 'true'
         run: |
           git config --local user.email "action@github.com"
           git config --local user.name "Lyrics Bot"
           
-          # If the file didn't change, exit gracefully
           if git diff --quiet lyrics_db.json; then
             echo "No new lyrics found. Exiting."
             exit 0
@@ -37,7 +44,13 @@ jobs:
           
           git add lyrics_db.json
           git commit -m "Added lyrics for issue #${{ github.event.issue.number }}"
-          
-          # Pull before pushing to avoid conflicts
           git pull --rebase origin main
           git push
+
+      - name: Auto-Close Issue
+        if: steps.fetcher.outputs.already_exists == 'true'
+        run: |
+          gh issue comment ${{ github.event.issue.number }} --body "These lyrics already exist in the database! Closing this issue. 🎵"
+          gh issue close ${{ github.event.issue.number }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

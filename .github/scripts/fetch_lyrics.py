@@ -1,6 +1,7 @@
 import sys
 import json
 import requests
+import os
 
 def fetch_lyrica(title, artist):
     try:
@@ -10,12 +11,8 @@ def fetch_lyrica(title, artist):
             "timestamps": "true"
         }, timeout=15)
         
-        print(f"[Debug] API Status: {resp.status_code}")
-        
         if resp.status_code == 200:
             data = resp.json()
-            print(f"[Debug] API Response: {data}")
-            
             if data.get("status") == "success":
                 lyrics = data.get("data", {}).get("lyrics", "")
                 if lyrics:
@@ -27,29 +24,36 @@ def fetch_lyrica(title, artist):
 if __name__ == "__main__":
     title_artist = sys.argv[1]
     try:
-        # The issue title is "Song Title - Artist Name"
         title, artist = title_artist.split(" - ", 1)
     except:
         print("Invalid title format. Expected 'Title - Artist'")
         sys.exit(0)
 
+    title = title.strip()
+    artist = artist.strip()
+    key = f"{title.lower()}|{artist.lower()}"
+
+    # 1. Load the existing DB
+    try:
+        with open("lyrics_db.json", "r") as f:
+            db = json.load(f)
+    except:
+        db = {}
+
+    # 2. Check if it already exists
+    if key in db:
+        print(f"ALREADY_EXISTS: Lyrics for '{title}' are already in the database.")
+        sys.exit(0) # Exit cleanly, the YAML will handle closing the issue
+
+    # 3. If not, fetch it
     print(f"Searching for: '{title}' by '{artist}'")
     lyrics = fetch_lyrica(title, artist)
 
     if lyrics:
-        try:
-            with open("lyrics_db.json", "r") as f:
-                db = json.load(f)
-        except:
-            db = {}
-        
-        # Use the exact same key format as the Rust app
-        key = f"{title.lower().strip()}|{artist.lower().strip()}"
         db[key] = lyrics
-        
         with open("lyrics_db.json", "w") as f:
             json.dump(db, f, indent=2)
-        
         print(f"Success! Lyrics added to DB under key: {key}")
     else:
         print("Could not fetch lyrics automatically. The database was not updated.")
+        sys.exit(1) # Exit with error so the Action fails visibly
